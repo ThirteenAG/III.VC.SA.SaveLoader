@@ -32,6 +32,13 @@ public:
 		memset((void *)address, 0x90, size);
 		VirtualProtect((void *)address, size, protect[0], &protect[1]);
 	}
+	inline static void FillWithZeroes(int address, int size)
+	{
+		unsigned long protect[2];
+		VirtualProtect((void *)address, size, PAGE_EXECUTE_READWRITE, &protect[0]);
+		memset((void *)address, 0x00, size);
+		VirtualProtect((void *)address, size, protect[0], &protect[1]);
+	}
 	inline static void RedirectCall(int address, void *func)
 	{
 		int temp = 0xE8;
