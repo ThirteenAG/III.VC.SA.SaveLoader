@@ -17,6 +17,7 @@ char *isInMenu;
 int *_saveFileName;
 char(__thiscall *LoadSave)(int, char);
 int to_int(char const *s);
+char* szCustomUserFilesDirectoryInGameDir;
 
 DWORD WINAPI Init(LPVOID param)
 {
@@ -28,6 +29,8 @@ DWORD WINAPI Init(LPVOID param)
 
 	bool bSkipIntro = iniReader.ReadInteger("MAIN", "SkipIntro", 1) == 1;
 
+	szCustomUserFilesDirectoryInGameDir = iniReader.ReadString("MAIN", "CustomUserFilesDirectoryInGameDir", "");
+
 	auto& gvm = address_manager::singleton();
 
 	if (gvm.IsIII())
@@ -38,6 +41,14 @@ DWORD WINAPI Init(LPVOID param)
 			{
 				injector::WriteMemory<char>(0x582A7B, 0x05, true);
 			}
+
+			if (strncmp(szCustomUserFilesDirectoryInGameDir, "0", 1) != 0)
+			{
+				injector::WriteMemory(0x580BFA + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+				injector::WriteMemory(0x580C50 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+				injector::MakeNOP(0x580C5B, 1, true);
+			}
+
 			loadingStage = (int *)0x8F5838;
 			userdirPath = (int *)0x8E28C0;
 			currentMenuItem = 14;
@@ -84,6 +95,14 @@ DWORD WINAPI Init(LPVOID param)
 		{
 			if (gvm.GetMajorVersion() == 1 && gvm.GetMinorVersion() == 0)
 			{
+				if (strncmp(szCustomUserFilesDirectoryInGameDir, "0", 1) != 0)
+				{
+					injector::WriteMemory(0x601A9B + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+					injector::WriteMemory(0x601B23 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+					injector::WriteMemory(0x60228E + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+					injector::WriteMemory(0x602312 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+				}
+
 				if (bSkipIntro)
 				{
 					injector::WriteMemory<char>(0x5FFFAB, 0x05, true);
@@ -136,6 +155,12 @@ DWORD WINAPI Init(LPVOID param)
 			{
 				if (gvm.GetMajorVersion() == 1 && gvm.GetMinorVersion() == 0)
 				{
+					if (strncmp(szCustomUserFilesDirectoryInGameDir, "0", 1) != 0)
+					{
+						injector::WriteMemory(0x744FF3 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+						injector::WriteMemory(0x745180 + 0x2, szCustomUserFilesDirectoryInGameDir, true);
+					}
+
 					loadingStage = (int *)0xC8D4C0;
 					LoadSave = (char(__thiscall *)(int, char)) 0x573680;
 					userdirPath = (int *)0xC16F18;
