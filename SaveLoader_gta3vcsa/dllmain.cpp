@@ -19,6 +19,11 @@ char(__thiscall *LoadSave)(int, char);
 int to_int(char const *s);
 char* szCustomUserFilesDirectoryInGameDir;
 
+char* __cdecl InitUserDirectories()
+{
+	return szCustomUserFilesDirectoryInGameDir;
+}
+
 DWORD WINAPI Init(LPVOID param)
 {
 
@@ -44,9 +49,9 @@ DWORD WINAPI Init(LPVOID param)
 
 			if (strncmp(szCustomUserFilesDirectoryInGameDir, "0", 1) != 0)
 			{
-				injector::WriteMemory(0x580BFA + 0x1, szCustomUserFilesDirectoryInGameDir, true);
-				injector::WriteMemory(0x580C50 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
-				injector::MakeNOP(0x580C5B, 1, true);
+				injector::MakeCALL(0x479080, InitUserDirectories, true); // = 0x580BB0 + 0x0  -> call    sub_580BB0
+				injector::MakeCALL(0x5811DD, InitUserDirectories, true); // = 0x580BB0 + 0x0  -> call    sub_580BB0
+				injector::MakeCALL(0x591EDD, InitUserDirectories, true); // = 0x580BB0 + 0x0  -> call    sub_580BB0
 			}
 
 			loadingStage = (int *)0x8F5838;
@@ -97,10 +102,10 @@ DWORD WINAPI Init(LPVOID param)
 			{
 				if (strncmp(szCustomUserFilesDirectoryInGameDir, "0", 1) != 0)
 				{
-					injector::WriteMemory(0x601A9B + 0x1, szCustomUserFilesDirectoryInGameDir, true);
-					injector::WriteMemory(0x601B23 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
-					injector::WriteMemory(0x60228E + 0x1, szCustomUserFilesDirectoryInGameDir, true);
-					injector::WriteMemory(0x602312 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
+					injector::MakeCALL(0x48E020, InitUserDirectories, true); // = 0x602240 + 0x0->call    sub_602240
+					injector::MakeCALL(0x61D8CA, InitUserDirectories, true); // = 0x602240 + 0x0->call    sub_602240
+					injector::MakeCALL(0x601A40, InitUserDirectories, true);
+					injector::MakeJMP(0x601A45, 0x601B2F, true);
 				}
 
 				if (bSkipIntro)
@@ -157,8 +162,9 @@ DWORD WINAPI Init(LPVOID param)
 				{
 					if (strncmp(szCustomUserFilesDirectoryInGameDir, "0", 1) != 0)
 					{
-						injector::WriteMemory(0x744FF3 + 0x1, szCustomUserFilesDirectoryInGameDir, true);
-						injector::WriteMemory(0x745180 + 0x2, szCustomUserFilesDirectoryInGameDir, true);
+						injector::MakeCALL(0x538860, InitUserDirectories, true); // = 0x744FB0 + 0x0->call    _InitUserDirectories; >> moved to CFileMgr::initialize
+						injector::MakeCALL(0x619075, InitUserDirectories, true); // = 0x744FB0 + 0x0->call    _InitUserDirectories; >> moved to CFileMgr::initialize
+						injector::MakeCALL(0x747470, InitUserDirectories, true); // = 0x744FB0 + 0x0->call    _InitUserDirectories; >> moved to CFileMgr::initialize
 					}
 
 					loadingStage = (int *)0xC8D4C0;
