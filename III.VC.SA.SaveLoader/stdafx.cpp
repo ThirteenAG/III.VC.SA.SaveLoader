@@ -1,5 +1,5 @@
 // stdafx.cpp : source file that includes just the standard includes
-// SaveLoader_gta3vcsa.pch will be the pre-compiled header
+// III.VC.SA.SaveLoader.pch will be the pre-compiled header
 // stdafx.obj will contain the pre-compiled type information
 
 #include "stdafx.h"
