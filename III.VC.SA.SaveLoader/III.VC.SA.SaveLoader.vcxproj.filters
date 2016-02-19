@@ -119,5 +119,14 @@
     <ClCompile Include="..\includes\hooking\Hooking.Patterns.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\includes\jsoncpp\include\json_reader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\includes\jsoncpp\include\json_value.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\includes\jsoncpp\include\json_writer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

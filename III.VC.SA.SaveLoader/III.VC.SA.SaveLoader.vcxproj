@@ -180,6 +180,9 @@
     <ClCompile Include="..\includes\cpr\include\cpr\session.cpp" />
     <ClCompile Include="..\includes\cpr\include\cpr\util.cpp" />
     <ClCompile Include="..\includes\hooking\Hooking.Patterns.cpp" />
+    <ClCompile Include="..\includes\jsoncpp\include\json_reader.cpp" />
+    <ClCompile Include="..\includes\jsoncpp\include\json_value.cpp" />
+    <ClCompile Include="..\includes\jsoncpp\include\json_writer.cpp" />
     <ClCompile Include="dllmain.cpp">
       <CompileAsManaged Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</CompileAsManaged>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

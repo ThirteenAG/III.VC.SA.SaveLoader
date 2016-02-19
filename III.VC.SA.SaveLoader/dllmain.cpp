@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <cpr/cpr.h>
 #include <cpr/multipart.h>
@@ -11,7 +12,8 @@
 #include "..\includes\injector\hooking.hpp"
 #include "..\includes\injector\calling.hpp"
 #include "..\includes\injector\utility.hpp"
-#include "IniReader.h"
+#include "..\includes\IniReader.h"
+#include "..\includes\jsoncpp\include\json\reader.h"
 #include <stdint.h>
 #pragma comment(lib, "wldap32.lib")
 #pragma comment(lib, "Ws2_32.lib")
@@ -21,23 +23,25 @@ bool bDelay;
 auto& gvm = injector::address_manager::singleton();
 
 int32_t nSaveNum;
-bool bSkipIntro, bSkipOutro;
-bool bDisableLoadingScreens;
-bool bUploadSaves, bDownloadSaves;
+bool bSkipIntro, bSkipOutro, bDisableLoadingScreens;
+bool bUploadSaves, bDownloadSaves, bCopyUrlToClipboard;
 char* szCustomUserFilesDirectory;
 
 char* pUserDirPath;
 
 uint32_t bCurrentSaveSlot;
 uint32_t* TheText;
-static wchar_t backupText[100];
+static wchar_t backupText[50];
+static wchar_t backupText2[50];
 wchar_t* (__thiscall *pfGetText)(int, char *);
-const static wchar_t SnPString[] = L"THIS IS GTASNP TEST STRING";
+const static wchar_t SnPString[] = L"Uploading to gtasnp.com...";
 
-DWORD WINAPI Thread(LPVOID)
+DWORD WINAPI UploadSave(LPVOID lpParameter)
 {
+	std::string SFPath(pUserDirPath);
+	SFPath += "8.b";
 	auto url = cpr::Url{ "http://gtasnp.com/upload/process" };
-	auto multipart = cpr::Multipart{ { "file", cpr::File{ "GTASAsf1.b" } } };
+	auto multipart = cpr::Multipart{ { "file", cpr::File{ SFPath } } };
 	auto header = cpr::Header
 	{
 		{ "Host", "gtasnp.com" },
@@ -49,14 +53,123 @@ DWORD WINAPI Thread(LPVOID)
 	};
 
 	auto r = cpr::Post(url, multipart, header);
-	MessageBox(0, r.text.c_str(), r.text.c_str(), 0);
+
+	Json::Value parsedFromString;
+	Json::Reader reader;
+	bool parsingSuccessful = reader.parse(r.text, parsedFromString);
+	if (parsingSuccessful && parsedFromString["error_code"].asBool() == false)
+	{
+		/*
+		{
+		game:          'gtasa_pc', // string if successful, false if error
+		error_code:    false,      // string if error, false if no error
+		error_message: '',         // always string, empty if no error
+		uuid:          'xhnDKn'    // string if successful, false if error
+		}
+		*/
+		std::wstring wc(L"Save uploaded to gtasnp.com/");
+
+		std::string result(parsedFromString["uuid"].asCString());
+		std::wstring uuid(result.size(), L'#');
+		mbstowcs(&uuid[0], result.c_str(), result.size());
+		wc += uuid;
+		wcsncpy((wchar_t*)lpParameter, &wc[0], 39);
+
+		CIniReader iniWriter("");
+		result = "http://gtasnp.com/" + result;
+		iniWriter.WriteString("GTASnP.com", "LatestUpload", (char*)result.c_str());
+
+		if (bCopyUrlToClipboard)
+		{
+			OpenClipboard(0);
+			EmptyClipboard();
+			HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, result.size() + 1);
+			if (hg)
+			{
+				memcpy(GlobalLock(hg), result.c_str(), result.size() + 1);
+				GlobalUnlock(hg);
+				SetClipboardData(CF_TEXT, hg);
+				CloseClipboard();
+				GlobalFree(hg);
+			}
+			CloseClipboard();
+		}
+		//MessageBox(0, parsedFromString["uuid"].asCString(), 0, 0);
+	}
+	else
+	{
+		std::string result(parsedFromString["error_message"].asCString());
+		std::wstring wc(result.size(), L'#');
+		mbstowcs(&wc[0], result.c_str(), result.size());
+		wcsncpy((wchar_t*)lpParameter, &wc[0], 39);
+	}
+	
+	return 1;
 }
 
-injector::hook_back<bool(__fastcall*)(DWORD* _this, char bSlotIndex)> hbPcSaveSaveSlot;
-bool __fastcall PcSaveSaveSlotHook(DWORD* _this, char bSlotIndex)
+DWORD WINAPI DownloadSave(LPVOID lpParameter)
+{
+	std::string SFPath(pUserDirPath);
+	SFPath += "8.b";
+
+	std::string ID((char*)lpParameter);
+	ID = ID.substr(ID.find("/") + 1);
+
+	std::string URL;
+	URL = "gtasnp.com/download/file/" + ID + "?slot=8";
+
+	auto r = cpr::Get(cpr::Url{ URL });
+
+	if (r.status_code == 200)
+	{
+		std::fstream fs;
+		fs.open(SFPath, std::fstream::binary | std::fstream::in | std::fstream::out | std::fstream::trunc);
+
+		if (fs.is_open())
+		{
+			fs << r.text;
+			fs.close();
+		}
+	}
+	return r.status_code;
+}
+
+injector::hook_back<char(__fastcall*)(DWORD* _this, int bSlotIndex)> hbPcSaveSaveSlot;
+char __fastcall PcSaveSaveSlotHook(DWORD* _this, int bSlotIndex)
 {
 	_asm mov bCurrentSaveSlot, eax //for some reason bSlotIndex returns dl instead of eax
 	return hbPcSaveSaveSlot.fun(_this, bSlotIndex);
+}
+
+injector::hook_back<bool(__cdecl*)(int bSlotIndex)> hbCheckSlotDataValid;
+bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
+{
+	CIniReader iniReader("");
+	static char* szLatestUpload = iniReader.ReadString("GTASnP.com", "LatestUpload", "");
+	if (szLatestUpload[0] != 0)
+	{
+		wchar_t* ptr = pfGetText((int)TheText, "FELD_WR");
+		if (backupText2[0] == 0)
+			wcsncpy(backupText2, ptr, 28);
+
+		if (nSlotIndex == 7)
+		{
+			auto status_code = DownloadSave(szLatestUpload);
+			if (status_code == 200)
+			{
+				wcsncpy(ptr, L"Save loaded from gtasnp.com", 28);
+			}
+			else
+			{
+				wcsncpy(ptr, L"Error downloading save file.", 28);
+			}
+		}
+		else
+		{
+			wcsncpy(ptr, backupText2, 28);
+		}
+	}
+	return hbCheckSlotDataValid.fun(nSlotIndex);
 }
 
 injector::hook_back<void(__fastcall*)(DWORD* _this, int PageId)> hbMenuGotoPageHook;
@@ -64,17 +177,16 @@ void __fastcall MenuGotoPageHook(DWORD* _this, int PageId)
 {
 	wchar_t* ptr = pfGetText((int)TheText, "FES_SSC");
 	if (backupText[0] == 0)
-		wcscpy(backupText, ptr);
+		wcsncpy(backupText, ptr, 39);
 
 	if (bCurrentSaveSlot == 7) //8th
 	{
-		wcscpy(ptr, SnPString);
-
-
+		wcsncpy(ptr, SnPString, 39);
+		CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
 	}
 	else
 	{
-		wcscpy(ptr, backupText);
+		wcsncpy(ptr, backupText, 39);
 	}
 
 	return hbMenuGotoPageHook.fun(_this, PageId);
@@ -235,14 +347,22 @@ void VC()
 
 		pattern = hook::pattern("E8 ? ? ? ? EB 4E");
 		hbMenuGotoPageHook.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), MenuGotoPageHook).get(); //0x4972A5
+	}
 
+	if (bDownloadSaves)
+	{
+		auto pattern = hook::pattern("E8 ? ? ? ? 84 C0 59 74 7D");
+		hbCheckSlotDataValid.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), CheckSlotDataValidHook).get(); //0x49730C
+	}
+
+	if (bUploadSaves || bDownloadSaves)
+	{
 		pattern = hook::pattern("E8 ? ? ? ? DB 05 ? ? ? ? 50 89 C3 D8 0D");
 		auto GetTextCall = pattern.get(0).get<uint32_t>(0);
 		auto GetText = injector::GetBranchDestination(GetTextCall, true).as_int();
 		pfGetText = (wchar_t *(__thiscall *)(int, char *))GetText;
-		TheText = *pattern.get(0).get<uint32_t*>(-9);
+		TheText = *pattern.get(0).get<uint32_t*>(-9);		
 	}
-
 }
 
 void SA()
@@ -261,6 +381,7 @@ DWORD WINAPI Init(LPVOID)
 
 	bUploadSaves = iniReader.ReadInteger("GTASnP.com", "UploadSaves", 1) != 0;
 	bDownloadSaves = iniReader.ReadInteger("GTASnP.com", "DownloadSaves", 1) != 0;
+	bCopyUrlToClipboard = iniReader.ReadInteger("GTASnP.com", "CopyUrlToClipboard", 1) != 0;
 
 	auto pattern = hook::pattern("64 89 25 00 00 00 00");
 	if (!(pattern.size() > 0) && !bDelay)
@@ -303,7 +424,6 @@ BOOL APIENTRY DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH)
 	{
-
 		Init(NULL);
 	}
 	return TRUE;
