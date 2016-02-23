@@ -34,7 +34,9 @@ uint32_t* TheText;
 static wchar_t backupText[50];
 static wchar_t backupText2[50];
 wchar_t* (__thiscall *pfGetText)(int, char *);
+char* (__thiscall *pfGetTextSA)(int, char *);
 const static wchar_t SnPString[] = L"Uploading to gtasnp.com...";
+const static char SnPStringSA[] = "Uploading to gtasnp.com...";
 
 DWORD WINAPI UploadSave(LPVOID lpParameter)
 {
@@ -67,13 +69,23 @@ DWORD WINAPI UploadSave(LPVOID lpParameter)
 		uuid:          'xhnDKn'    // string if successful, false if error
 		}
 		*/
-		std::wstring wc(L"Save uploaded to gtasnp.com/");
-
-		std::string result(parsedFromString["uuid"].asCString());
-		std::wstring uuid(result.size(), L'#');
-		mbstowcs(&uuid[0], result.c_str(), result.size());
-		wc += uuid;
-		wcsncpy((wchar_t*)lpParameter, &wc[0], 39);
+		std::string result;
+		if (gvm.IsSA())
+		{
+			std::string wc("Save uploaded to gtasnp.com/");
+			result = (parsedFromString["uuid"].asCString());
+			wc += result;
+			strncpy((char*)lpParameter, &wc[0], 39);
+		}
+		else
+		{
+			std::wstring wc(L"Save uploaded to gtasnp.com/");
+			result = (parsedFromString["uuid"].asCString());
+			std::wstring uuid(result.size(), L'#');
+			mbstowcs(&uuid[0], result.c_str(), result.size());
+			wc += uuid;
+			wcsncpy((wchar_t*)lpParameter, &wc[0], 39);
+		}
 
 		CIniReader iniWriter("");
 		result = "http://gtasnp.com/" + result;
@@ -113,7 +125,7 @@ DWORD WINAPI DownloadSave(LPVOID lpParameter)
 	SFPath += "8.b";
 
 	std::string ID((char*)lpParameter);
-	ID = ID.substr(ID.find("/") + 1);
+	ID = ID.substr(ID.find_last_of("/") + 1);
 
 	std::string URL;
 	URL = "gtasnp.com/download/file/" + ID + "?slot=8";
@@ -146,27 +158,35 @@ bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
 {
 	CIniReader iniReader("");
 	static char* szLatestUpload = iniReader.ReadString("GTASnP.com", "LatestUpload", "");
+	
 	if (szLatestUpload[0] != 0)
 	{
-		wchar_t* ptr = pfGetText((int)TheText, "FELD_WR");
-		if (backupText2[0] == 0)
-			wcsncpy(backupText2, ptr, 28);
-
+		wchar_t* ptr;
+		if (!gvm.IsSA())
+		{
+			ptr = pfGetText((int)TheText, "FELD_WR");
+			if (backupText2[0] == 0)
+				wcsncpy(backupText2, ptr, 28);
+		}
+		
 		if (nSlotIndex == 7)
 		{
 			auto status_code = DownloadSave(szLatestUpload);
 			if (status_code == 200)
 			{
-				wcsncpy(ptr, L"Save loaded from gtasnp.com", 28);
+				if (!gvm.IsSA())
+					wcsncpy(ptr, L"Save loaded from gtasnp.com", 28);
 			}
 			else
 			{
-				wcsncpy(ptr, L"Error downloading save file.", 28);
+				if (!gvm.IsSA())
+					wcsncpy(ptr, L"Error downloading save file.", 28);
 			}
 		}
 		else
 		{
-			wcsncpy(ptr, backupText2, 28);
+			if (!gvm.IsSA())
+				wcsncpy(ptr, backupText2, 28);
 		}
 	}
 	return hbCheckSlotDataValid.fun(nSlotIndex);
@@ -487,9 +507,162 @@ void VC()
 	}
 }
 
+DWORD RsCameraBeginUpdateNOP()
+{
+	return 0;
+}
+
+injector::hook_back<void(__cdecl*)(void)> hbFrontendIdleSA;
+void __cdecl FrontendIdleHookSA()
+{
+	static int nTimes = 0;
+	injector::MakeCALL(0x53E80E, RsCameraBeginUpdateNOP, true);
+
+	if (++nTimes == 2)
+	{
+		bool bNoLoad = (GetAsyncKeyState(VK_SHIFT) & 0xF000) != 0;
+		if (!bNoLoad && nSaveNum != -1)
+		{
+			if (nSaveNum == 0)
+				FindFiles();
+
+			//MessageBox(0, std::to_string(nSaveNum).c_str(), 0, 0);
+
+			if (nSaveNum != 0 && nSaveNum != 129)
+			{
+				static auto CheckSlotDataValid = (bool(__cdecl*)(int))0x5D1380;
+				if (!CheckSlotDataValid(nSaveNum - 1))
+				{
+					nSaveNum = 129;
+				}
+			}
+
+			static uint32_t CMenuManager = 0xBA6748;
+			if (nSaveNum == 129) //NG
+			{
+				*injector::memory_pointer(CMenuManager + 0x5C).get<char>() = 0; //menu.m_bMenuActive
+			}
+			else
+			{
+				// Make the game load automatically
+				*injector::memory_pointer(CMenuManager + 0x32).get<char>() = 0;  // menu.bDeactivateMenu
+				*injector::memory_pointer(CMenuManager + 0x15F).get<char>() = (nSaveNum - 1);     // menu.SaveNumber
+				*injector::memory_pointer(0xB72910).get<char>() = 0;              // game.bMissionPack
+
+				// Simulate that we came into the menu and clicked to load game
+				*injector::memory_pointer(CMenuManager + 0x15D).get<char>() = 13;
+				*injector::memory_pointer(CMenuManager + 0x1B3C).get<char>() = 1;
+			}
+			*injector::memory_pointer(0xB7CB49).get<char>() = 0; //game.m_UserPause
+		}
+
+		injector::MakeCALL(0x53E80E, 0x619450);
+		injector::MakeCALL(0x53ECCB, 0x53E770);
+	}
+
+	return hbFrontendIdleSA.fun();
+}
+
+void SimulateCopyrightScreen()
+{
+	// Simulate that the copyright screen happened
+	*injector::memory_pointer(0x8D093C).get<int>() = 0;       // Previous splash index = copyright notice
+	*injector::memory_pointer(0xBAB340).get<float>() -= 1000.0;// Decrease timeSinceLastScreen, so it will change immediately
+	*injector::memory_pointer(0xBAB31E).get<char>() = 1;      // First Loading Splash
+}
+
 void SA()
 {
+	pUserDirPath = (char*)0xC16F18;
 
+	struct psInitialize
+	{
+		void operator()(injector::reg_pack&)
+		{
+			injector::WriteMemory(0xC8CF98, 0, true);
+
+			if (strncmp(szCustomUserFilesDirectory, "0", 1) != 0)
+			{
+				char			moduleName[MAX_PATH];
+				GetModuleFileName(NULL, moduleName, MAX_PATH);
+				char* tempPointer = strrchr(moduleName, '\\');
+				*(tempPointer + 1) = '\0';
+				strcat(moduleName, szCustomUserFilesDirectory);
+				strcpy(szCustomUserFilesDirectory, moduleName);
+
+				injector::MakeCALL(0x538860, InitUserDirectories, true);
+				injector::MakeCALL(0x619075, InitUserDirectories, true);
+				injector::MakeCALL(0x747470, InitUserDirectories, true);
+			}
+
+			if (bSkipIntro)
+			{
+				injector::MakeNOP(0x747483, 6);           // Disable gGameState = 0 setting
+				injector::WriteMemory<int>(0xC8D4C0, 5);  // Put the game where the user wants (default's to the copyright screen)
+
+				// Hook the copyright screen fading in/out and simulates that it has happened
+				injector::MakeNOP(0x748C2B, 5);
+				injector::MakeCALL(0x748C9A, injector::raw_ptr(SimulateCopyrightScreen));
+			}
+
+			if (bDisableLoadingScreens)
+			{
+				// Skip fading screen rendering
+				injector::MakeJMP(0x590AE4, 0x590C9E);
+
+				// Disable loading bar rendering
+				injector::MakeNOP(0x5905B4, 5);
+
+				// Disable loading screen rendering
+				injector::MakeNOP(0x590D9F, 5);
+				injector::WriteMemory<uint8_t>(0x590D9F, 0xC3, true);
+
+				// Disable audio tune from loading screen
+				injector::MakeNOP(0x748CF6, 5);
+			}
+
+			injector::MakeNOP(0x748CBD, 2);   // Let FrontentIdle run even when minimized
+			hbFrontendIdleSA.fun = injector::MakeCALL(0x53ECCB, FrontendIdleHookSA).get();
+		}
+	}; injector::MakeInline<psInitialize>(0x74742F, 0x747439);
+
+	if (bUploadSaves)
+	{
+		struct GotoPageSA
+		{
+			void operator()(injector::reg_pack& regs)
+			{
+				bCurrentSaveSlot = *(uint8_t *)(0xBA6748 + 0x15F);
+
+				char* ptr = pfGetTextSA((int)TheText, "FES_SSC");
+				if (backupText[0] == 0)
+					strncpy((char*)backupText, ptr, 39);
+
+				if (bCurrentSaveSlot == 7) //8th
+				{
+					strncpy(ptr, SnPStringSA, 39);
+					CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
+				}
+				else
+				{
+					strncpy(ptr, (char*)backupText, 39);
+				}
+
+				*(uint8_t *)0xBA8286 = 0;
+			}
+		}; injector::MakeInline<GotoPageSA>(0x578E2C, 0x578E2C + 0x7);
+	}
+
+	if (bDownloadSaves)
+	{
+		hbCheckSlotDataValid.fun = injector::MakeCALL(0x578EF2, CheckSlotDataValidHook).get();
+	}
+
+	if (bUploadSaves || bDownloadSaves)
+	{
+		pfGetTextSA = (char *(__thiscall *)(int, char *))0x6A0050;
+		TheText = (uint32_t*)0xC1B340;
+	}
 }
 
 DWORD WINAPI Init(LPVOID)
