@@ -364,17 +364,48 @@ void III()
 
 	if (bUploadSaves)
 	{
+		auto pattern = hook::pattern("E8 ? ? ? ? B9 ? ? ? ? 88 C3 E8 ? ? ? ? 84 DB");
+		hbPcSaveSaveSlot.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), PcSaveSaveSlotHook).get(); //0x485202
 
+		pattern = hook::pattern("8B 85 48 05 00 00 89 85 54 05 00 00 C7 85"); //0x485217
+		struct GotoPageIII
+		{
+			void operator()(injector::reg_pack& regs)
+			{
+				bCurrentSaveSlot = *(uint8_t *)(regs.ebp + 0x55C);
+
+				wchar_t* ptr = pfGetText((int)TheText, "FES_SSC");
+				if (backupText[0] == 0)
+					wcsncpy(backupText, ptr, 39);
+
+				if (bCurrentSaveSlot == 7) //8th
+				{
+					wcsncpy(ptr, SnPString, 39);
+					CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
+				}
+				else
+				{
+					wcsncpy(ptr, backupText, 39);
+				}
+
+				regs.eax = *(uint32_t *)(regs.ebp + 0x548);
+			}
+		}; injector::MakeInline<GotoPageIII>(pattern.get(1).get<uint32_t>(0), pattern.get(1).get<uint32_t>(6));
 	}
 
 	if (bDownloadSaves)
 	{
-
+		auto pattern = hook::pattern("E8 ? ? ? ? 84 C0 59 0F 84");
+		hbCheckSlotDataValid.fun = injector::MakeCALL(pattern.get(4).get<uint32_t>(0), CheckSlotDataValidHook).get(); //0x48525F
 	}
 
 	if (bUploadSaves || bDownloadSaves)
 	{
-
+		pattern = hook::pattern("B9 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? C2 04 00");
+		auto GetTextCall = pattern.get(0).get<uint32_t>(10);
+		auto GetText = injector::GetBranchDestination(GetTextCall, true).as_int();
+		pfGetText = (wchar_t *(__thiscall *)(int, char *))GetText;
+		TheText = *pattern.get(0).get<uint32_t*>(1);
 	}
 }
 
