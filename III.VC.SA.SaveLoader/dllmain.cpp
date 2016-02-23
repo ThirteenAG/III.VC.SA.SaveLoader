@@ -263,32 +263,119 @@ void __cdecl FrontendIdleHook()
 		}
 
 		auto pattern = hook::pattern("53 B9 ? ? ? ? 83 EC 28 68 ? ? ? ? 68"); //0x869630
+		
+		if (gvm.IsIII())
+			pattern = hook::pattern("? B9 ? ? ? ? C6 05 ? ? ? ? 01 E8 ? ? ? ? B9 ? ? ? ? C6"); //0x8F59D8 gta3
+		
 		static uint32_t* CMenuManager = *pattern.get(0).get<uint32_t*>(2);
 		if (nSaveNum == 129) //NG
 		{
-			uint32_t NewGameStart = 7;
-			injector::WriteMemory((uint32_t)CMenuManager + 0xF8, NewGameStart);
+			if (gvm.IsIII())
+			{
+				static auto dword_485134 = hook::pattern("C6 85 ? 01 00 00 00 E8 ? ? ? ? 6A").get(0).get<uint32_t>(2);
+				injector::WriteMemory<uint8_t>(dword_485134, 0x10, true);
+
+				auto dword_48C7F8 = hook::pattern("B9 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 43 83 FB 32");
+				static auto dword_8F59D8 = *dword_48C7F8.get(0).get<uint32_t*>(1);
+				
+				struct EmergencyVehiclesFix
+				{
+					void operator()(injector::reg_pack& regs)
+					{
+						regs.eax = (uint32_t)dword_8F59D8;
+						injector::WriteMemory<uint8_t>(dword_485134, 0x14, true);
+						injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x111, 0);
+					}
+				}; injector::MakeInline<EmergencyVehiclesFix>(dword_48C7F8.get(0).get<uint32_t>(0), dword_48C7F8.get(0).get<uint32_t>(5));
+			}
+
+			uint32_t NewGameStart = gvm.IsIII() ? 10 : 7;
+			injector::WriteMemory((uint32_t)CMenuManager + (gvm.IsIII() ? 0x548 : 0xF8), NewGameStart);
 		}
 		else
 		{
-			injector::WriteMemory<char>((uint32_t)CMenuManager + 0x100, nSaveNum - 1); //LastUsedSlot
-			injector::WriteMemory<char>((uint32_t)CMenuManager + 0xF8, 12); //currentMenuItem
+			injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x55C : 0x100), nSaveNum - 1); //LastUsedSlot
+			injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x548 : 0xF8), gvm.IsIII() ? 14 : 12); //currentMenuItem
 		}
+		
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x115 : 0x11), 1);
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x111 : 0x38), 0);
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x114 : 0x39), 1);
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x454 : 0x3C), 1);
 
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x11, 1);
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x38, 0);
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x39, 1);
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x3C, 1);
 	}
 	auto pattern = hook::pattern("E8 ? ? ? ? 83 C4 08 B8 01 00 00 00 5B C3");
 	auto pattern2 = hook::pattern("83 EC 08 E8 ? ? ? ? DD D8");
-	injector::MakeCALL(pattern.get(3).get<uint32_t>(0), pattern2.get(0).get<uint32_t>(0)); //0x4A5BF2 0x4A5C60
+	auto pattern3 = hook::pattern("83 EC 08 E8 ? ? ? ? E8 ? ? ? ? E8");
+	if (gvm.IsIII())
+		injector::MakeCALL(pattern.get(2).get<uint32_t>(0), pattern3.get(1).get<uint32_t>(0)); //0x48E90F 0x48E700
+	else
+		injector::MakeCALL(pattern.get(3).get<uint32_t>(0), pattern2.get(0).get<uint32_t>(0)); //0x4A5BF2 0x4A5C60*/
 	return hbFrontendIdle.fun();
 }
 
 void III()
 {
+	auto pattern = hook::pattern("68 ? ? ? ? 68 ? ? ? ? 50 C7 84 24 80 00 00 00 00");
+	pUserDirPath = *pattern.get(0).get<char*>(1);
 
+	pattern = hook::pattern("C7 05 ? ? ? ? 00 00 00 00 C7 05 ? ? ? ? 00 00 00 00 E8"); //0x5811CE
+	static uint32_t* dword_72CF84 = *pattern.get(10).get<uint32_t*>(12);
+
+	struct psInitialize
+	{
+		void operator()(injector::reg_pack&)
+		{
+			injector::WriteMemory(dword_72CF84, 0, true);
+
+			if (strncmp(szCustomUserFilesDirectory, "0", 1) != 0)
+			{
+				char			moduleName[MAX_PATH];
+				GetModuleFileName(NULL, moduleName, MAX_PATH);
+				char* tempPointer = strrchr(moduleName, '\\');
+				*(tempPointer + 1) = '\0';
+				strcat(moduleName, szCustomUserFilesDirectory);
+				strcpy(szCustomUserFilesDirectory, moduleName);
+
+				auto pattern = hook::pattern("E8 ? ? ? ? 50 E8 ? ? ? ? 59 C3");
+				injector::MakeCALL(pattern.get(0).get<uint32_t>(0), InitUserDirectories, true); //0x479080
+				pattern = hook::pattern("E8 ? ? ? ? 50 E8 ? ? ? ? 59 E8");
+				injector::MakeCALL(pattern.get(0).get<uint32_t>(0), InitUserDirectories, true); //0x5811DD
+				pattern = hook::pattern("E8 ? ? ? ? 68 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 89 C5 59 85 ED");
+				injector::MakeCALL(pattern.get(1).get<uint32_t>(0), InitUserDirectories, true); //0x591EDD
+			}
+
+			if (bSkipIntro)
+			{
+				auto pattern = hook::pattern("C7 05 ? ? ? ? 01 00 00 00 E9");
+				injector::WriteMemory<uint8_t>(pattern.get(5).get<uint32_t>(6), 0x05, true); //0x582A75
+			}
+
+			if (bDisableLoadingScreens)
+			{
+				auto pattern = hook::pattern("53 83 EC 50 80 3D");
+				injector::WriteMemory<uint8_t>(pattern.get(0).get<uint32_t>(0), 0xC3, true); //0x48D770
+			}
+
+			auto pattern = hook::pattern("E8 ? ? ? ? 83 C4 08 B8 01 00 00 00 5B C3");
+			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(2).get<uint32_t>(0), FrontendIdleHook).get(); //0x48E90F
+		}
+	}; injector::MakeInline<psInitialize>(pattern.get(10).get<uint32_t>(10), pattern.get(10).get<uint32_t>(20));
+
+	if (bUploadSaves)
+	{
+
+	}
+
+	if (bDownloadSaves)
+	{
+
+	}
+
+	if (bUploadSaves || bDownloadSaves)
+	{
+
+	}
 }
 
 void VC()
@@ -307,6 +394,13 @@ void VC()
 
 			if (strncmp(szCustomUserFilesDirectory, "0", 1) != 0)
 			{
+				char			moduleName[MAX_PATH];
+				GetModuleFileName(NULL, moduleName, MAX_PATH);
+				char* tempPointer = strrchr(moduleName, '\\');
+				*(tempPointer + 1) = '\0';
+				strcat(moduleName, szCustomUserFilesDirectory);
+				strcpy(szCustomUserFilesDirectory, moduleName);
+
 				auto pattern = hook::pattern("E8 ? ? ? ? 50 E8 ? ? ? ? 59 C3");
 				injector::MakeCALL(pattern.get(0).get<uint32_t>(0), InitUserDirectories, true); //0x48E020
 				pattern = hook::pattern("E8 ? ? ? ? 68 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 89 C5");
@@ -396,7 +490,6 @@ DWORD WINAPI Init(LPVOID)
 		while (!(pattern.size() > 0))
 			pattern = hook::pattern("64 89 25 00 00 00 00");
 	}
-
 
 	if (gvm.IsIII())
 	{
