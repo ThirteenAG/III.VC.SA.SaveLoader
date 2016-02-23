@@ -364,9 +364,6 @@ void III()
 
 	if (bUploadSaves)
 	{
-		auto pattern = hook::pattern("E8 ? ? ? ? B9 ? ? ? ? 88 C3 E8 ? ? ? ? 84 DB");
-		hbPcSaveSaveSlot.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), PcSaveSaveSlotHook).get(); //0x485202
-
 		pattern = hook::pattern("8B 85 48 05 00 00 89 85 54 05 00 00 C7 85"); //0x485217
 		struct GotoPageIII
 		{
