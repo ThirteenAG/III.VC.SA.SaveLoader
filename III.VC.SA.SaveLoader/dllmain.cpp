@@ -33,6 +33,7 @@ uint32_t bCurrentSaveSlot;
 uint32_t* TheText;
 static wchar_t backupText[50];
 static wchar_t backupText2[50];
+size_t bckpTxtSize, bckpTxtSize2;
 wchar_t* (__thiscall *pfGetText)(int, char *);
 char* (__thiscall *pfGetTextSA)(int, char *);
 const static wchar_t SnPString[] = L"Uploading to gtasnp.com...";
@@ -75,16 +76,20 @@ DWORD WINAPI UploadSave(LPVOID lpParameter)
 			std::string wc("Save uploaded to gtasnp.com/");
 			result = (parsedFromString["uuid"].asCString());
 			wc += result;
-			strncpy((char*)lpParameter, &wc[0], 39);
+			strncpy((char*)lpParameter, &wc[0], bckpTxtSize);
 		}
 		else
 		{
 			std::wstring wc(L"Save uploaded to gtasnp.com/");
+			if (gvm.IsIII())
+			{
+				wc = L"URL: gtasnp.com/";
+			}
 			result = (parsedFromString["uuid"].asCString());
 			std::wstring uuid(result.size(), L'#');
 			mbstowcs(&uuid[0], result.c_str(), result.size());
 			wc += uuid;
-			wcsncpy((wchar_t*)lpParameter, &wc[0], 39);
+			wcsncpy((wchar_t*)lpParameter, &wc[0], bckpTxtSize);
 		}
 
 		CIniReader iniWriter("");
@@ -113,7 +118,7 @@ DWORD WINAPI UploadSave(LPVOID lpParameter)
 		std::string result(parsedFromString["error_message"].asCString());
 		std::wstring wc(result.size(), L'#');
 		mbstowcs(&wc[0], result.c_str(), result.size());
-		wcsncpy((wchar_t*)lpParameter, &wc[0], 39);
+		wcsncpy((wchar_t*)lpParameter, &wc[0], bckpTxtSize);
 	}
 	
 	return 1;
@@ -162,11 +167,14 @@ bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
 	if (szLatestUpload[0] != 0)
 	{
 		wchar_t* ptr;
-		if (!gvm.IsSA())
+		if (!gvm.IsSA() && !gvm.IsIII())
 		{
 			ptr = pfGetText((int)TheText, "FELD_WR");
 			if (backupText2[0] == 0)
-				wcsncpy(backupText2, ptr, 28);
+			{
+				bckpTxtSize2 = wcslen(ptr);
+				wcsncpy(backupText2, ptr, bckpTxtSize2);
+			}
 		}
 		
 		if (nSlotIndex == 7)
@@ -174,19 +182,19 @@ bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
 			auto status_code = DownloadSave(szLatestUpload);
 			if (status_code == 200)
 			{
-				if (!gvm.IsSA())
-					wcsncpy(ptr, L"Save loaded from gtasnp.com", 28);
+				if (!gvm.IsSA() && !gvm.IsIII())
+					wcsncpy(ptr, L"Save loaded from gtasnp.com", bckpTxtSize2);
 			}
 			else
 			{
-				if (!gvm.IsSA())
-					wcsncpy(ptr, L"Error downloading save file.", 28);
+				if (!gvm.IsSA() && !gvm.IsIII())
+					wcsncpy(ptr, L"Error downloading save file.", bckpTxtSize2);
 			}
 		}
 		else
 		{
-			if (!gvm.IsSA())
-				wcsncpy(ptr, backupText2, 28);
+			if (!gvm.IsSA() && !gvm.IsIII())
+				wcsncpy(ptr, backupText2, bckpTxtSize2);
 		}
 	}
 	return hbCheckSlotDataValid.fun(nSlotIndex);
@@ -197,16 +205,19 @@ void __fastcall MenuGotoPageHook(DWORD* _this, int PageId)
 {
 	wchar_t* ptr = pfGetText((int)TheText, "FES_SSC");
 	if (backupText[0] == 0)
-		wcsncpy(backupText, ptr, 39);
+	{
+		bckpTxtSize = wcslen(ptr);
+		wcsncpy(backupText, ptr, bckpTxtSize);
+	}
 
 	if (bCurrentSaveSlot == 7) //8th
 	{
-		wcsncpy(ptr, SnPString, 39);
+		wcsncpy(ptr, SnPString, bckpTxtSize);
 		CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
 	}
 	else
 	{
-		wcsncpy(ptr, backupText, 39);
+		wcsncpy(ptr, backupText, bckpTxtSize);
 	}
 
 	return hbMenuGotoPageHook.fun(_this, PageId);
@@ -393,16 +404,19 @@ void III()
 
 				wchar_t* ptr = pfGetText((int)TheText, "FES_SSC");
 				if (backupText[0] == 0)
-					wcsncpy(backupText, ptr, 39);
+				{
+					bckpTxtSize = wcslen(ptr);
+					wcsncpy(backupText, ptr, bckpTxtSize);
+				}
 
 				if (bCurrentSaveSlot == 7) //8th
 				{
-					wcsncpy(ptr, SnPString, 39);
+					wcsncpy(ptr, SnPString, bckpTxtSize);
 					CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
 				}
 				else
 				{
-					wcsncpy(ptr, backupText, 39);
+					wcsncpy(ptr, backupText, bckpTxtSize);
 				}
 
 				regs.eax = *(uint32_t *)(regs.ebp + 0x548);
@@ -636,16 +650,19 @@ void SA()
 
 				char* ptr = pfGetTextSA((int)TheText, "FES_SSC");
 				if (backupText[0] == 0)
-					strncpy((char*)backupText, ptr, 39);
+				{
+					bckpTxtSize = strlen(ptr);
+					strncpy((char*)backupText, ptr, bckpTxtSize);
+				}
 
 				if (bCurrentSaveSlot == 7) //8th
 				{
-					strncpy(ptr, SnPStringSA, 39);
+					strncpy(ptr, SnPStringSA, bckpTxtSize);
 					CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
 				}
 				else
 				{
-					strncpy(ptr, (char*)backupText, 39);
+					strncpy(ptr, (char*)backupText, bckpTxtSize);
 				}
 
 				*(uint8_t *)0xBA8286 = 0;
