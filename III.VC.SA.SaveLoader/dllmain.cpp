@@ -531,8 +531,8 @@ void __cdecl FrontendIdleHookSA()
 {
 	static int nTimes = 0;
 	injector::MakeCALL(0x53E80E, RsCameraBeginUpdateNOP, true);
-
-	if (++nTimes == 2)
+	
+	if (++nTimes >= 2)
 	{
 		bool bNoLoad = (GetAsyncKeyState(VK_SHIFT) & 0xF000) != 0;
 		if (!bNoLoad && nSaveNum != -1)
@@ -554,7 +554,9 @@ void __cdecl FrontendIdleHookSA()
 			static uint32_t CMenuManager = 0xBA6748;
 			if (nSaveNum == 129) //NG
 			{
+				*injector::memory_pointer(CMenuManager + 0x5D).get<char>() = 1;
 				*injector::memory_pointer(CMenuManager + 0x5C).get<char>() = 0; //menu.m_bMenuActive
+
 			}
 			else
 			{
@@ -573,7 +575,7 @@ void __cdecl FrontendIdleHookSA()
 		injector::MakeCALL(0x53E80E, 0x619450);
 		injector::MakeCALL(0x53ECCB, 0x53E770);
 	}
-
+	
 	return hbFrontendIdleSA.fun();
 }
 
