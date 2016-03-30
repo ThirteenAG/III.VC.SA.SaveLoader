@@ -260,6 +260,7 @@ void FindFiles()
 			{
 				LastWriteTime = fd.ftLastWriteTime;
 				std::string str(fd.cFileName);
+				str.erase(0, 4); //del GTA3
 				auto n = str.find_first_of("0123456789");
 				if (n != std::string::npos)
 				{
