@@ -385,7 +385,7 @@ void III()
 
 			if (bDisableLoadingScreens)
 			{
-				auto pattern = hook::pattern("53 83 EC 50 80 3D");
+				auto pattern = hook::pattern("53 83 EC 50");
 				injector::WriteMemory<uint8_t>(pattern.get(0).get<uint32_t>(0), 0xC3, true); //0x48D770
 			}
 
@@ -488,7 +488,7 @@ void VC()
 
 			if (bDisableLoadingScreens)
 			{
-				auto pattern = hook::pattern("53 83 EC 68 68 ? ? ? ? E8");
+				auto pattern = hook::pattern("53 83 EC 68 ? ? ? ? ? E8");
 				injector::WriteMemory<uint8_t>(pattern.get(0).get<uint32_t>(0), 0xC3, true); //0x4A69D0
 			}
 
