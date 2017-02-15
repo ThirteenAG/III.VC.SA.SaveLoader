@@ -319,6 +319,7 @@ void __cdecl FrontendIdleHookSA()
 	return hbFrontendIdleSA.fun();
 }
 
+uint32_t* hbFrontendIdleAddr = nullptr;
 injector::hook_back<void(__fastcall*)(void*)> hbFrontendIdle;
 void FrontendIdleHook(void* menuManager)
 {
@@ -392,8 +393,9 @@ void FrontendIdleHook(void* menuManager)
 		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x454 : 0x3C), 1, true);
 	}
 
+	injector::MakeCALL(hbFrontendIdleAddr, hbFrontendIdle.fun, true);
 	_asm popad
-	return hbFrontendIdle.fun(menuManager);
+	//return hbFrontendIdle.fun(menuManager);
 };
 
 void III()
@@ -439,7 +441,8 @@ void III()
 			}
 
 			auto pattern = hook::pattern("E8 ? ? ? ? 83 ? ? ? ? ? ? D9 EE 74 ? 83 C4 08 DD D8 C3"); //0x48E721
-			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), FrontendIdleHook).get();
+			hbFrontendIdleAddr = pattern.get(0).get<uint32_t>(0);
+			hbFrontendIdle.fun = injector::MakeCALL(hbFrontendIdleAddr, FrontendIdleHook).get();
 		}
 	}; injector::MakeInline<psInitialize>(pattern.get(10).get<uint32_t>(10), pattern.get(10).get<uint32_t>(20));
 
@@ -541,7 +544,8 @@ void VC()
 			}
 
 			auto pattern = hook::pattern("E8 ? ? ? ? 83 ? ? ? ? ? ? D9 EE 74 ? 83 C4 08 DD D8 C3"); //0x4A5C88
-			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), FrontendIdleHook).get();
+			hbFrontendIdleAddr = pattern.get(0).get<uint32_t>(0);
+			hbFrontendIdle.fun = injector::MakeCALL(hbFrontendIdleAddr, FrontendIdleHook).get();
 		}
 	}; injector::MakeInline<psInitialize>(pattern.get(17).get<uint32_t>(10), pattern.get(17).get<uint32_t>(20));
 
