@@ -1,4 +1,23 @@
+#pragma warning (disable:4996) //gvm
 #include "stdafx.h"
+#include <stdio.h>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <cpr/cpr.h>
+#include <cpr/multipart.h>
+#include "..\includes\hooking\Hooking.Patterns.h"
+#include "..\includes\injector\injector.hpp"
+#include "..\includes\injector\assembly.hpp"
+#include "..\includes\injector\hooking.hpp"
+#include "..\includes\injector\calling.hpp"
+#include "..\includes\injector\utility.hpp"
+#include "..\includes\IniReader.h"
+#include "..\includes\jsoncpp\include\json\reader.h"
+#include <stdint.h>
+#pragma comment(lib, "wldap32.lib")
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "libcurl.lib")
 
 bool bDelay;
 auto& gvm = injector::address_manager::singleton();
@@ -6,9 +25,10 @@ auto& gvm = injector::address_manager::singleton();
 int32_t nSaveNum;
 bool bSkipIntro, bSkipOutro, bDisableLoadingScreens;
 bool bUploadSaves, bDownloadSaves, bCopyUrlToClipboard;
-char szCustomUserFilesDirectory[MAX_PATH];
+char* szCustomUserFilesDirectory;
 
 char* pUserDirPath;
+
 uint32_t bCurrentSaveSlot;
 uint32_t* TheText;
 static wchar_t backupText[50];
@@ -18,12 +38,6 @@ wchar_t* (__thiscall *pfGetText)(int, char *);
 char* (__thiscall *pfGetTextSA)(int, char *);
 const static wchar_t SnPString[] = L"Uploading to gtasnp.com...";
 const static char SnPStringSA[] = "Uploading to gtasnp.com...";
-
-char* __cdecl InitUserDirectories()
-{
-	CreateDirectory(szCustomUserFilesDirectory, NULL);
-	return szCustomUserFilesDirectory;
-}
 
 DWORD WINAPI UploadSave(LPVOID lpParameter)
 {
@@ -106,7 +120,7 @@ DWORD WINAPI UploadSave(LPVOID lpParameter)
 		mbstowcs(&wc[0], result.c_str(), result.size());
 		wcsncpy((wchar_t*)lpParameter, &wc[0], bckpTxtSize);
 	}
-
+	
 	return 1;
 }
 
@@ -149,7 +163,7 @@ bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
 {
 	CIniReader iniReader("");
 	static char* szLatestUpload = iniReader.ReadString("GTASnP.com", "LatestUpload", "");
-
+	
 	if (szLatestUpload[0] != 0)
 	{
 		wchar_t* ptr;
@@ -162,7 +176,7 @@ bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
 				wcsncpy(backupText2, ptr, bckpTxtSize2);
 			}
 		}
-
+		
 		if (nSlotIndex == 7)
 		{
 			auto status_code = DownloadSave(szLatestUpload);
@@ -184,6 +198,35 @@ bool __cdecl CheckSlotDataValidHook(int nSlotIndex)
 		}
 	}
 	return hbCheckSlotDataValid.fun(nSlotIndex);
+}
+
+injector::hook_back<void(__fastcall*)(DWORD* _this, int PageId)> hbMenuGotoPageHook;
+void __fastcall MenuGotoPageHook(DWORD* _this, int PageId)
+{
+	wchar_t* ptr = pfGetText((int)TheText, "FES_SSC");
+	if (backupText[0] == 0)
+	{
+		bckpTxtSize = wcslen(ptr);
+		wcsncpy(backupText, ptr, bckpTxtSize);
+	}
+
+	if (bCurrentSaveSlot == 7) //8th
+	{
+		wcsncpy(ptr, SnPString, bckpTxtSize);
+		CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
+	}
+	else
+	{
+		wcsncpy(ptr, backupText, bckpTxtSize);
+	}
+
+	return hbMenuGotoPageHook.fun(_this, PageId);
+}
+
+char* __cdecl InitUserDirectories()
+{
+	CreateDirectory(szCustomUserFilesDirectory, NULL);
+	return szCustomUserFilesDirectory;
 }
 
 void GetSystemTimeFromSave(SYSTEMTIME& SystemLastWriteTime, WIN32_FIND_DATA& fd)
@@ -230,105 +273,16 @@ void FindFiles()
 	}
 }
 
-injector::hook_back<void(__fastcall*)(DWORD* _this, int PageId)> hbMenuGotoPageHook;
-void __fastcall MenuGotoPageHook(DWORD* _this, int PageId)
+injector::hook_back<void(__cdecl*)(void)> hbFrontendIdle;
+void __cdecl FrontendIdleHook()
 {
-	wchar_t* ptr = pfGetText((int)TheText, "FES_SSC");
-	if (backupText[0] == 0)
-	{
-		bckpTxtSize = wcslen(ptr);
-		wcsncpy(backupText, ptr, bckpTxtSize);
-	}
-
-	if (bCurrentSaveSlot == 7) //8th
-	{
-		wcsncpy(ptr, SnPString, bckpTxtSize);
-		CreateThread(0, 0, (LPTHREAD_START_ROUTINE)&UploadSave, ptr, 0, NULL);
-	}
-	else
-	{
-		wcsncpy(ptr, backupText, bckpTxtSize);
-	}
-
-	return hbMenuGotoPageHook.fun(_this, PageId);
-}
-
-DWORD RsCameraBeginUpdateNOP()
-{
-	return 0;
-}
-
-void SimulateCopyrightScreen()
-{
-	// Simulate that the copyright screen happened
-	*injector::memory_pointer(0x8D093C).get<int>() = 0;       // Previous splash index = copyright notice
-	*injector::memory_pointer(0xBAB340).get<float>() -= 1000.0;// Decrease timeSinceLastScreen, so it will change immediately
-	*injector::memory_pointer(0xBAB31E).get<char>() = 1;      // First Loading Splash
-}
-
-injector::hook_back<void(__cdecl*)(void)> hbFrontendIdleSA;
-void __cdecl FrontendIdleHookSA()
-{
-	static int nTimes = 0;
-	injector::MakeCALL(0x53E80E, RsCameraBeginUpdateNOP, true);
-
-	if (++nTimes >= 2)
-	{
-		bool bNoLoad = (GetAsyncKeyState(VK_SHIFT) & 0xF000) != 0;
-		if (!bNoLoad && nSaveNum != -1)
-		{
-			if (nSaveNum == 0)
-				FindFiles();
-
-			//MessageBox(0, std::to_string(nSaveNum).c_str(), 0, 0);
-
-			if (nSaveNum != 0 && nSaveNum != 129)
-			{
-				static auto CheckSlotDataValid = (bool(__cdecl*)(int))0x5D1380;
-				if (!CheckSlotDataValid(nSaveNum - 1))
-				{
-					nSaveNum = 129;
-				}
-			}
-
-			static uint32_t CMenuManager = 0xBA6748;
-			if (nSaveNum == 129) //NG
-			{
-				*injector::memory_pointer(CMenuManager + 0x5D).get<char>() = 1;
-				*injector::memory_pointer(CMenuManager + 0x5C).get<char>() = 0; //menu.m_bMenuActive
-
-			}
-			else
-			{
-				// Make the game load automatically
-				*injector::memory_pointer(CMenuManager + 0x32).get<char>() = 0;  // menu.bDeactivateMenu
-				*injector::memory_pointer(CMenuManager + 0x15F).get<char>() = (nSaveNum - 1);     // menu.SaveNumber
-				*injector::memory_pointer(0xB72910).get<char>() = 0;              // game.bMissionPack
-
-				// Simulate that we came into the menu and clicked to load game
-				*injector::memory_pointer(CMenuManager + 0x15D).get<char>() = 13;
-				*injector::memory_pointer(CMenuManager + 0x1B3C).get<char>() = 1;
-			}
-			*injector::memory_pointer(0xB7CB49).get<char>() = 0; //game.m_UserPause
-		}
-
-		injector::MakeCALL(0x53E80E, 0x619450);
-		injector::MakeCALL(0x53ECCB, 0x53E770);
-	}
-
-	return hbFrontendIdleSA.fun();
-}
-
-injector::hook_back<void(__fastcall*)(void*)> hbFrontendIdle;
-void FrontendIdleHook(void* menuManager)
-{
-	_asm pushad
-	static bool bMenuInit = false;
 	bool bNoLoad = (GetAsyncKeyState(VK_SHIFT) & 0xF000) != 0;
-	if ((!bNoLoad && nSaveNum != -1) && !bMenuInit)
+	if (!bNoLoad && nSaveNum != -1)
 	{
 		if (nSaveNum == 0)
 			FindFiles();
+
+		//MessageBox(0, std::to_string(nSaveNum).c_str(), 0, 0);
 
 		if (nSaveNum != 0 && nSaveNum != 129)
 		{
@@ -341,60 +295,56 @@ void FrontendIdleHook(void* menuManager)
 		}
 
 		auto pattern = hook::pattern("53 B9 ? ? ? ? 83 EC 28 68 ? ? ? ? 68"); //0x869630
+		
 		if (gvm.IsIII())
 			pattern = hook::pattern("? B9 ? ? ? ? C6 05 ? ? ? ? 01 E8 ? ? ? ? B9 ? ? ? ? C6"); //0x8F59D8 gta3
-
+		
 		static uint32_t* CMenuManager = *pattern.get(0).get<uint32_t*>(2);
-
-		if (gvm.IsVC())
+		if (nSaveNum == 129) //NG
 		{
-			pattern = hook::pattern("80 3D ? ? ? ? 00 53 89 CB ? ? ? ? ? ? 80"); //0x498E5F
-			static auto ProcessOnOffMenuOptions = (void(__fastcall*)(uint32_t* _this))(pattern.get(0).get<uint32_t>(0));
-			ProcessOnOffMenuOptions(CMenuManager);
+			if (gvm.IsIII())
+			{
+				static auto dword_485134 = hook::pattern("C6 85 ? 01 00 00 00 E8 ? ? ? ? 6A").get(0).get<uint32_t>(2);
+				injector::WriteMemory<uint8_t>(dword_485134, 0x10, true);
+
+				auto dword_48C7F8 = hook::pattern("B9 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 43 83 FB 32");
+				static auto dword_8F59D8 = *dword_48C7F8.get(0).get<uint32_t*>(1);
+				
+				struct EmergencyVehiclesFix
+				{
+					void operator()(injector::reg_pack& regs)
+					{
+						regs.eax = (uint32_t)dword_8F59D8;
+						injector::WriteMemory<uint8_t>(dword_485134, 0x14, true);
+						injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x111, 0);
+					}
+				}; injector::MakeInline<EmergencyVehiclesFix>(dword_48C7F8.get(0).get<uint32_t>(0), dword_48C7F8.get(0).get<uint32_t>(5));
+			}
+
+			uint32_t NewGameStart = gvm.IsIII() ? 10 : 7;
+			injector::WriteMemory((uint32_t)CMenuManager + (gvm.IsIII() ? 0x548 : 0xF8), NewGameStart);
 		}
 		else
 		{
-			if (nSaveNum == 129) //NG
-			{
-				if (gvm.IsIII())
-				{
-					static auto dword_485134 = hook::pattern("C6 85 ? 01 00 00 00 E8 ? ? ? ? 6A").get(0).get<uint32_t>(2);
-					injector::WriteMemory<uint8_t>(dword_485134, 0x10, true);
-
-					auto dword_48C7F8 = hook::pattern("B9 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 43 83 FB 32");
-					static auto dword_8F59D8 = *dword_48C7F8.get(0).get<uint32_t*>(1);
-
-					struct Hook
-					{
-						void operator()(injector::reg_pack& regs)
-						{
-							regs.eax = (uint32_t)dword_8F59D8;
-							injector::WriteMemory<uint8_t>(dword_485134, 0x14, true);
-							injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + 0x111, 0, true);
-						}
-					}; injector::MakeInline<Hook>(dword_48C7F8.get(0).get<uint32_t>(0), dword_48C7F8.get(0).get<uint32_t>(5));
-				}
-
-				uint32_t NewGameStart = gvm.IsIII() ? 10 : 7;
-				injector::WriteMemory((uint32_t)CMenuManager + (gvm.IsIII() ? 0x548 : 0xF8), NewGameStart, true);
-			}
-			else
-			{
-				injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x55C : 0x100), nSaveNum - 1, true); //LastUsedSlot
-				injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x548 : 0xF8), gvm.IsIII() ? 14 : 12, true); //currentMenuItem
-			}
+			injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x55C : 0x100), nSaveNum - 1); //LastUsedSlot
+			injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x548 : 0xF8), gvm.IsIII() ? 14 : 12); //currentMenuItem
 		}
+		
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x115 : 0x11), 1);
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x111 : 0x38), 0);
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x114 : 0x39), 1);
+		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x454 : 0x3C), 1);
 
-		bMenuInit = true;
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x115 : 0x11), 1, true);
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x111 : 0x38), 0, true);
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x114 : 0x39), 1, true);
-		injector::WriteMemory<uint8_t>((uint32_t)CMenuManager + (gvm.IsIII() ? 0x454 : 0x3C), 1, true);
 	}
-
-	_asm popad
-	return hbFrontendIdle.fun(menuManager);
-};
+	auto pattern = hook::pattern("E8 ? ? ? ? 83 C4 08 B8 01 00 00 00 5B C3");
+	auto pattern2 = hook::pattern("83 EC 08 E8 ? ? ? ? DD D8");
+	auto pattern3 = hook::pattern("83 EC 08 E8 ? ? ? ? E8 ? ? ? ? E8");
+	if (gvm.IsIII())
+		injector::MakeCALL(pattern.get(2).get<uint32_t>(0), pattern3.get(1).get<uint32_t>(0)); //0x48E90F 0x48E700
+	else
+		injector::MakeCALL(pattern.get(3).get<uint32_t>(0), pattern2.get(0).get<uint32_t>(0)); //0x4A5BF2 0x4A5C60*/
+	return hbFrontendIdle.fun();
+}
 
 void III()
 {
@@ -412,9 +362,10 @@ void III()
 
 			if (strncmp(szCustomUserFilesDirectory, "0", 1) != 0)
 			{
-				char moduleName[MAX_PATH];
+				char			moduleName[MAX_PATH];
 				GetModuleFileName(NULL, moduleName, MAX_PATH);
-				*((strrchr(moduleName, '\\')) + 1) = '\0';
+				char* tempPointer = strrchr(moduleName, '\\');
+				*(tempPointer + 1) = '\0';
 				strcat(moduleName, szCustomUserFilesDirectory);
 				strcpy(szCustomUserFilesDirectory, moduleName);
 
@@ -438,8 +389,8 @@ void III()
 				injector::WriteMemory<uint8_t>(pattern.get(0).get<uint32_t>(0), 0xC3, true); //0x48D770
 			}
 
-			auto pattern = hook::pattern("E8 ? ? ? ? 83 ? ? ? ? ? ? D9 EE 74 ? 83 C4 08 DD D8 C3"); //0x48E721
-			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), FrontendIdleHook).get();
+			auto pattern = hook::pattern("E8 ? ? ? ? 83 C4 08 B8 01 00 00 00 5B C3");
+			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(2).get<uint32_t>(0), FrontendIdleHook).get(); //0x48E90F
 		}
 	}; injector::MakeInline<psInitialize>(pattern.get(10).get<uint32_t>(10), pattern.get(10).get<uint32_t>(20));
 
@@ -506,9 +457,10 @@ void VC()
 
 			if (strncmp(szCustomUserFilesDirectory, "0", 1) != 0)
 			{
-				char moduleName[MAX_PATH];
+				char			moduleName[MAX_PATH];
 				GetModuleFileName(NULL, moduleName, MAX_PATH);
-				*((strrchr(moduleName, '\\')) + 1) = '\0';
+				char* tempPointer = strrchr(moduleName, '\\');
+				*(tempPointer + 1) = '\0';
 				strcat(moduleName, szCustomUserFilesDirectory);
 				strcpy(szCustomUserFilesDirectory, moduleName);
 
@@ -540,8 +492,8 @@ void VC()
 				injector::WriteMemory<uint8_t>(pattern.get(0).get<uint32_t>(0), 0xC3, true); //0x4A69D0
 			}
 
-			auto pattern = hook::pattern("E8 ? ? ? ? 83 ? ? ? ? ? ? D9 EE 74 ? 83 C4 08 DD D8 C3"); //0x4A5C88
-			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(0).get<uint32_t>(0), FrontendIdleHook).get();
+			auto pattern = hook::pattern("E8 ? ? ? ? 83 C4 08 B8 01 00 00 00 5B C3");
+			hbFrontendIdle.fun = injector::MakeCALL(pattern.get(3).get<uint32_t>(0), FrontendIdleHook).get(); //0x4A5BF2
 		}
 	}; injector::MakeInline<psInitialize>(pattern.get(17).get<uint32_t>(10), pattern.get(17).get<uint32_t>(20));
 
@@ -566,8 +518,74 @@ void VC()
 		auto GetTextCall = pattern.get(0).get<uint32_t>(0);
 		auto GetText = injector::GetBranchDestination(GetTextCall, true).as_int();
 		pfGetText = (wchar_t *(__thiscall *)(int, char *))GetText;
-		TheText = *pattern.get(0).get<uint32_t*>(-9);
+		TheText = *pattern.get(0).get<uint32_t*>(-9);		
 	}
+}
+
+DWORD RsCameraBeginUpdateNOP()
+{
+	return 0;
+}
+
+injector::hook_back<void(__cdecl*)(void)> hbFrontendIdleSA;
+void __cdecl FrontendIdleHookSA()
+{
+	static int nTimes = 0;
+	injector::MakeCALL(0x53E80E, RsCameraBeginUpdateNOP, true);
+	
+	if (++nTimes >= 2)
+	{
+		bool bNoLoad = (GetAsyncKeyState(VK_SHIFT) & 0xF000) != 0;
+		if (!bNoLoad && nSaveNum != -1)
+		{
+			if (nSaveNum == 0)
+				FindFiles();
+
+			//MessageBox(0, std::to_string(nSaveNum).c_str(), 0, 0);
+
+			if (nSaveNum != 0 && nSaveNum != 129)
+			{
+				static auto CheckSlotDataValid = (bool(__cdecl*)(int))0x5D1380;
+				if (!CheckSlotDataValid(nSaveNum - 1))
+				{
+					nSaveNum = 129;
+				}
+			}
+
+			static uint32_t CMenuManager = 0xBA6748;
+			if (nSaveNum == 129) //NG
+			{
+				*injector::memory_pointer(CMenuManager + 0x5D).get<char>() = 1;
+				*injector::memory_pointer(CMenuManager + 0x5C).get<char>() = 0; //menu.m_bMenuActive
+
+			}
+			else
+			{
+				// Make the game load automatically
+				*injector::memory_pointer(CMenuManager + 0x32).get<char>() = 0;  // menu.bDeactivateMenu
+				*injector::memory_pointer(CMenuManager + 0x15F).get<char>() = (nSaveNum - 1);     // menu.SaveNumber
+				*injector::memory_pointer(0xB72910).get<char>() = 0;              // game.bMissionPack
+
+				// Simulate that we came into the menu and clicked to load game
+				*injector::memory_pointer(CMenuManager + 0x15D).get<char>() = 13;
+				*injector::memory_pointer(CMenuManager + 0x1B3C).get<char>() = 1;
+			}
+			*injector::memory_pointer(0xB7CB49).get<char>() = 0; //game.m_UserPause
+		}
+
+		injector::MakeCALL(0x53E80E, 0x619450);
+		injector::MakeCALL(0x53ECCB, 0x53E770);
+	}
+	
+	return hbFrontendIdleSA.fun();
+}
+
+void SimulateCopyrightScreen()
+{
+	// Simulate that the copyright screen happened
+	*injector::memory_pointer(0x8D093C).get<int>() = 0;       // Previous splash index = copyright notice
+	*injector::memory_pointer(0xBAB340).get<float>() -= 1000.0;// Decrease timeSinceLastScreen, so it will change immediately
+	*injector::memory_pointer(0xBAB31E).get<char>() = 1;      // First Loading Splash
 }
 
 void SA()
@@ -582,9 +600,10 @@ void SA()
 
 			if (strncmp(szCustomUserFilesDirectory, "0", 1) != 0)
 			{
-				char moduleName[MAX_PATH];
+				char			moduleName[MAX_PATH];
 				GetModuleFileName(NULL, moduleName, MAX_PATH);
-				*((strrchr(moduleName, '\\')) + 1) = '\0';
+				char* tempPointer = strrchr(moduleName, '\\');
+				*(tempPointer + 1) = '\0';
 				strcat(moduleName, szCustomUserFilesDirectory);
 				strcpy(szCustomUserFilesDirectory, moduleName);
 
@@ -673,8 +692,7 @@ DWORD WINAPI Init(LPVOID)
 	bSkipIntro = iniReader.ReadInteger("MAIN", "SkipIntro", 1) != 0;
 	bSkipOutro = iniReader.ReadInteger("MAIN", "SkipOutro", 1) != 0;
 	bDisableLoadingScreens = iniReader.ReadInteger("MAIN", "DisableLoadingScreens", 1) != 0;
-	char* sz = iniReader.ReadString("MAIN", "CustomUserFilesDirectoryInGameDir", "0");
-	strcpy(szCustomUserFilesDirectory, sz);
+	szCustomUserFilesDirectory = iniReader.ReadString("MAIN", "CustomUserFilesDirectoryInGameDir", "0");
 
 	bUploadSaves = iniReader.ReadInteger("GTASnP.com", "UploadSaves", 1) != 0;
 	bDownloadSaves = iniReader.ReadInteger("GTASnP.com", "DownloadSaves", 1) != 0;
@@ -695,16 +713,26 @@ DWORD WINAPI Init(LPVOID)
 	}
 
 	if (gvm.IsIII())
+	{
 		III();
+	}
 	else
+	{
 		if (gvm.IsVC())
+		{
 			VC();
+		}
 		else
+		{
 			if (gvm.IsSA())
+			{
 				SA();
-
+			}
+		}
+	}
 	return 0;
 }
+
 
 BOOL APIENTRY DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 {
