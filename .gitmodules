@@ -1,0 +1,18 @@
+[submodule "external/curl"]
+	path = external/curl
+	url = https://github.com/curl/curl
+[submodule "external/cpr"]
+	path = external/cpr
+	url = https://github.com/whoshuu/cpr
+[submodule "external/hooking"]
+	path = external/hooking
+	url = https://github.com/ThirteenAG/Hooking.Patterns
+[submodule "external/injector"]
+	path = external/injector
+	url = https://github.com/thelink2012/injector
+[submodule "external/jsoncpp"]
+	path = external/jsoncpp
+	url = https://github.com/open-source-parsers/jsoncpp
+[submodule "external/inireader"]
+	path = external/inireader
+	url = https://github.com/ThirteenAG/IniReader
