@@ -71,3 +71,4 @@ project "III.VC.SA.SaveLoader"
       optimize "On"
 	  flags { "StaticRuntime" }
 	  characterset ("MBCS")
+	  targetdir "data/"
