@@ -1,0 +1,29 @@
+version: 2.{build}
+skip_tags: true
+image: Visual Studio 2017
+configuration: Release
+platform: x86
+install:
+- cmd: >-
+    git submodule update --init --recursive
+
+    premake5.bat
+build:
+  project: build/III.VC.SA.SaveLoader.vcxproj
+  verbosity: minimal
+before_package:
+- cmd: >-
+    cd data
+
+    release.bat
+artifacts:
+- path: data/III.VC.SA.SaveLoader.zip
+  name: III.VC.SA.SaveLoader.zip
+deploy:
+- provider: GitHub
+  tag: v$(appveyor_build_version)
+  release: III.VC.SA.SaveLoader  v$(appveyor_build_version)
+  description: A plugin for GTA 3, Vice City and San Andreas, which automatically loads most recent savegame at game's launch.\n\n[Requires ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases)\n\n[GTAForums topic](http://gtaforums.com/topic/602025-iiivcsa-saveloader/)\n
+  auth_token:
+    secure: SXMI7bm5RKh5j1S8A8dnUP2HFw97xHHlJH+mA0hx819vtxOPCpMFY3aFZ+2v16ri
+  artifact: III.VC.SA.SaveLoader.zip
