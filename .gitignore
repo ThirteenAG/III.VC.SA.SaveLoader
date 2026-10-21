@@ -280,3 +280,12 @@ __pycache__/
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
+
+# Build output and local paths
+build/
+bin/
+data/*.pdb
+data/*.cfg
+/.env
+data/*.exp
+data/*.lib

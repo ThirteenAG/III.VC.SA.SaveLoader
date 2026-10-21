@@ -1,21 +1,18 @@
 #pragma once
-
-#include "targetver.h"
-#define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-
-#include <stdint.h>
-#include <stdio.h>
-#include <iostream>
-#include <fstream>
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <mutex>
+#include <stdexcept>
 #include <string>
-#include <cpr/cpr.h>
-#include <cpr/multipart.h>
+#include <string_view>
 #include "Hooking.Patterns.h"
-#include "IniReader.h"
-#include "json/reader.h"
+#include "safetyhook.hpp"
 #include "injector/injector.hpp"
-#include "injector/assembly.hpp"
 #include "injector/hooking.hpp"
-#include "injector/calling.hpp"
-#include "injector/utility.hpp"
+#include <callbacks.h>
+#include <gameref.hpp>
+#include <asi_settings/asi_settings.hpp>

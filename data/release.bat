@@ -1,5 +1,20 @@
-7za a -tzip ".\III.VC.SA.SaveLoader.zip" ".\III.VC.SA.SaveLoader.asi" ".\III.VC.SA.SaveLoader.ini"
-EXIT
+@echo off
+setlocal
+pushd "%~dp0" || exit /b 1
+if not exist "III.VC.SA.SaveLoader.asi" goto :error
+if not exist "III.VC.SA.SaveLoader.pdb" goto :error
+"..\tools\EmbedPDB\EmbedPDB.exe" "III.VC.SA.SaveLoader.asi"
+if errorlevel 1 goto :error
+powershell -NoProfile -ExecutionPolicy Bypass -File "..\sign.ps1" -Path "%CD%\III.VC.SA.SaveLoader.asi"
+if errorlevel 1 goto :error
+if exist "III.VC.SA.SaveLoader.zip" del "III.VC.SA.SaveLoader.zip"
+".\7za.exe" a -tzip "III.VC.SA.SaveLoader.zip" "III.VC.SA.SaveLoader.asi" "..\readme.md"
+if errorlevel 1 goto :error
+popd
+exit /b 0
+:error
+popd
+exit /b 1
 
 7-Zip Extra
 ~~~~~~~~~~~

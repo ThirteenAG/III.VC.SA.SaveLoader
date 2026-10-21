@@ -1,0 +1,55 @@
+{
+  "format": "asi-settings",
+  "version": "1.0",
+  "plugin": {
+    "name": "@plugin.name",
+    "priority": 30,
+    "games": [
+      { "name": "Grand Theft Auto III", "exe": [ "gta3.exe" ] },
+      { "name": "Grand Theft Auto: Vice City", "exe": [ "gta-vc.exe" ] },
+      { "name": "Grand Theft Auto: San Andreas", "exe": [ "gta_sa.exe" ] }
+    ]
+  },
+  "pages": [
+    { "id": "game", "title": "@page.game", "section": "gameplay" },
+    { "id": "compatibility", "title": "@page.compatibility", "section": "compatibility" }
+  ],
+  "settings": [
+    {
+      "id": "MAIN.LoadSlot", "type": "choice", "default": 0,
+      "choices": [
+        { "value": -1, "label": "@off" },
+        { "value": 0, "label": "@loadslot.recent" },
+        { "value": 1, "label": "@loadslot.1" },
+        { "value": 2, "label": "@loadslot.2" },
+        { "value": 3, "label": "@loadslot.3" },
+        { "value": 4, "label": "@loadslot.4" },
+        { "value": 5, "label": "@loadslot.5" },
+        { "value": 6, "label": "@loadslot.6" },
+        { "value": 7, "label": "@loadslot.7" },
+        { "value": 8, "label": "@loadslot.8" },
+        { "value": 9, "label": "@loadslot.newgame" }
+      ],
+      "label": "@loadslot", "description": "@loadslot.description",
+      "page": "game", "control": [ "cycler", "dropdown" ], "apply": "restart",
+      "presets": { "vanilla": -1, "recommended": 0, "enhanced": 0 }
+    },
+    {
+      "id": "MAIN.SkipLoadingScreens", "type": "bool", "default": 1,
+      "label": "@skiploading", "description": "@skiploading.description",
+      "page": "game", "control": [ "switch", "cycler" ], "apply": "restart",
+      "presets": { "vanilla": 0, "recommended": 1, "enhanced": 1 }
+    },
+    {
+      "id": "MAIN.SkipOutro", "type": "bool", "default": 1,
+      "label": "@skipoutro", "description": "@skipoutro.description",
+      "page": "game", "control": [ "switch", "cycler" ], "apply": "restart",
+      "presets": { "vanilla": 0, "recommended": 1, "enhanced": 1 }
+    },
+    {
+      "id": "MAIN.UserFilesFolder", "type": "string", "default": "", "maxLength": 200,
+      "label": "@userfiles", "description": "@userfiles.description",
+      "page": "compatibility", "visibility": "editor", "apply": "restart"
+    }
+  ]
+}
